@@ -255,3 +255,16 @@ for(i in 1:length(degs_file_paths))
 {
   get_degs_with_pathways(degs_csv_path = degs_file_paths[i], excel_report_output_dir = "/media/cidr/d7416dce-cdf6-43ed-9df7-978f8a9438d8/databackup_2019_07_11/work/SO_9292/excel_reports/edgeR/cd154_positive_vs_cd154_negative_not_eptb_not_pooled/", excel_report_filename = excel_report_names[i])
 }
+
+################################################################################################################################
+#generating degs with pathways excel reports for group wise cd154+ and negative files 
+#note that this comparison is 5 vs 1 sample
+################################################################################################################################
+degs_file_paths = list.files("/media/cidr/d7416dce-cdf6-43ed-9df7-978f8a9438d8/databackup_2019_07_11/work/SO_9292/degs_csv/edgeR_degs/groupwise_cd154_positive_vs_cd154_negative/", pattern = "[.]csv", full.names = T)
+degs_file_names = list.files("/media/cidr/d7416dce-cdf6-43ed-9df7-978f8a9438d8/databackup_2019_07_11/work/SO_9292/degs_csv/edgeR_degs/groupwise_cd154_positive_vs_cd154_negative/", pattern = "[.]csv")
+excel_report_names = gsub(x = degs_file_names, pattern = "csv", replacement = "xlsx")
+
+for(i in 1:length(degs_file_paths))
+{
+  get_degs_with_pathways(degs_csv_path = degs_file_paths[i], excel_report_output_dir = "/media/cidr/d7416dce-cdf6-43ed-9df7-978f8a9438d8/databackup_2019_07_11/work/SO_9292/excel_reports/edgeR/group_wise_cd154_positive_vs_cd154_negative/", excel_report_filename = excel_report_names[i])
+}
