@@ -2216,18 +2216,32 @@
     wb=createWorkbook()
     
     sheet=createSheet(wb,sheetName="details")
-    addDataFrame(x=as.data.frame(up_down_details_df),sheet=sheet,row.names = F)
+    setColumnWidth(sheet, 1:ncol(up_down_details_df), 30)
+    #the freeze pane call takes the row you want to freeze + 1 , and the col youi want to freeze +1 
+    xlsx::createFreezePane(sheet = sheet, rowSplit = 2,colSplit = ncol(up_down_details_df)+1)
+    header_style = xlsx::CellStyle(wb) + Font(wb,isBold = TRUE)
+    addDataFrame(x=as.data.frame(up_down_details_df),sheet=sheet,row.names = F, colnamesStyle = header_style)
     
     sheet=createSheet(wb,sheetName = "all_degs")
-    addDataFrame(x=as.data.frame(my_degs_df),sheet=sheet,row.names = F)
+    setColumnWidth(sheet, c(1,3:ncol(my_degs_df)),15)
+    setColumnWidth(sheet, 2, 30)
+    xlsx::createFreezePane(sheet = sheet, rowSplit = 2,colSplit = ncol(my_degs_df)+1)
+    gene_description_style = CellStyle(wb, alignment =  Alignment(horizontal = "ALIGN_LEFT",vertical = "VERTICAL_TOP",wrapText = TRUE)) 
+    addDataFrame(x=as.data.frame(my_degs_df),sheet=sheet,row.names = F, colStyle = list("2" = gene_description_style),colnamesStyle = header_style)
     try(doGSEA(geneList = for_gsea_gene_list,wb=wb,sheetNamePrefix = "pthwys_all_genes_"),silent=T)
     
     sheet=createSheet(wb,sheetName = "up_degs")
-    addDataFrame(x=as.data.frame(up_degs_df),sheet=sheet,row.names = F)
+    setColumnWidth(sheet, c(1,3:ncol(up_degs_df)),15)
+    setColumnWidth(sheet, 2, 30)
+    xlsx::createFreezePane(sheet = sheet, rowSplit = 2,colSplit = ncol(up_degs_df)+1)
+    addDataFrame(x=as.data.frame(up_degs_df),sheet=sheet,row.names = F, colStyle = list("2" = gene_description_style),colnamesStyle = header_style)
     try(doGSEA(geneList = up_gene_list,wb=wb,sheetNamePrefix = "pthwys_up_gene_"),silent=T)
     
     sheet=createSheet(wb,sheetName = "down_degs")
-    addDataFrame(x=as.data.frame(down_degs_df),sheet=sheet,row.names = F)
+    setColumnWidth(sheet, c(1,3:ncol(down_degs_df)),15)
+    setColumnWidth(sheet, 2, 30)
+    xlsx::createFreezePane(sheet = sheet, rowSplit = 2,colSplit = ncol(down_degs_df)+1)
+    addDataFrame(x=as.data.frame(down_degs_df),sheet=sheet,row.names = F, colStyle = list("2" = gene_description_style),colnamesStyle = header_style)
     try(doGSEA(geneList = down_gene_list,wb=wb,sheetNamePrefix = "pthwys_down_gene_"),silent=T)
     
     excel_report_filepath=getPath(filename = excel_report_filename,directory = excel_report_output_dir)
