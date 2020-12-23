@@ -2181,17 +2181,22 @@
     
     saveWorkbook(wb,file=excel_file_path)
   }
-  #######################################
-  # get_degs_with_pathways
-  # takes in a degs csv and generates an excel report with up regulated and downregulated results sparately along with pathways
-  #expects there is entrezid information in the data frame 
-  #######################################
+  ###############################################
+  #get_degs_with_pathways 
+  #this is a modified version of get_degs_with_pathways
+  #column name format and width are fixed in this 
+  ###############################################
   get_degs_with_pathways=function(degs_csv_path,excel_report_output_dir,excel_report_filename)
   {
     library(dplyr)
     library(xlsx)
     my_degs_df=read.csv(file=degs_csv_path,stringsAsFactors = F,header = T)
-    my_degs_df=my_degs_df %>% group_by(gene_symbol) %>% dplyr::filter(row_number()==1) %>% ungroup()
+    #the below line was a previous implementation of removing the duplicates
+    #my_degs_df=my_degs_df %>% group_by(gene_symbol) %>% dplyr::filter(row_number()==1) %>% ungroup()
+    #########################################
+    #new implementation of the removal of duplicates start
+    #########################################
+    my_degs_df=my_degs_df %>% dplyr::distinct(gene_symbol, log2FoldChange, .keep_all = TRUE )
     my_degs_df = my_degs_df %>% dplyr::arrange(desc(log2FoldChange)) %>% dplyr::filter(padj < 0.05)
     my_degs_df = my_degs_df %>% dplyr::filter(!is.na(padj), gene_symbol!="")
     my_degs_df = my_degs_df %>% group_by(gene_symbol) %>% dplyr::filter(row_number()==1) %>% ungroup()
@@ -2216,25 +2221,38 @@
     wb=createWorkbook()
     
     sheet=createSheet(wb,sheetName="details")
-    addDataFrame(x=as.data.frame(up_down_details_df),sheet=sheet,row.names = F)
+    setColumnWidth(sheet, 1:ncol(up_down_details_df), 30)
+    #the freeze pane call takes the row you want to freeze + 1 , and the col youi want to freeze +1 
+    xlsx::createFreezePane(sheet = sheet, rowSplit = 2,colSplit = ncol(up_down_details_df)+1)
+    header_style = xlsx::CellStyle(wb) + Font(wb,isBold = TRUE)
+    addDataFrame(x=as.data.frame(up_down_details_df),sheet=sheet,row.names = F, colnamesStyle = header_style)
     
     sheet=createSheet(wb,sheetName = "all_degs")
-    addDataFrame(x=as.data.frame(my_degs_df),sheet=sheet,row.names = F)
+    setColumnWidth(sheet, c(1,3:ncol(my_degs_df)),15)
+    setColumnWidth(sheet, 2, 30)
+    xlsx::createFreezePane(sheet = sheet, rowSplit = 2,colSplit = ncol(my_degs_df)+1)
+    gene_description_style = CellStyle(wb, alignment =  Alignment(horizontal = "ALIGN_LEFT",vertical = "VERTICAL_TOP",wrapText = TRUE)) 
+    addDataFrame(x=as.data.frame(my_degs_df),sheet=sheet,row.names = F, colStyle = list("2" = gene_description_style),colnamesStyle = header_style)
     try(doGSEA(geneList = for_gsea_gene_list,wb=wb,sheetNamePrefix = "pthwys_all_genes_"),silent=T)
     
     sheet=createSheet(wb,sheetName = "up_degs")
-    addDataFrame(x=as.data.frame(up_degs_df),sheet=sheet,row.names = F)
+    setColumnWidth(sheet, c(1,3:ncol(up_degs_df)),15)
+    setColumnWidth(sheet, 2, 30)
+    xlsx::createFreezePane(sheet = sheet, rowSplit = 2,colSplit = ncol(up_degs_df)+1)
+    addDataFrame(x=as.data.frame(up_degs_df),sheet=sheet,row.names = F, colStyle = list("2" = gene_description_style),colnamesStyle = header_style)
     try(doGSEA(geneList = up_gene_list,wb=wb,sheetNamePrefix = "pthwys_up_gene_"),silent=T)
     
     sheet=createSheet(wb,sheetName = "down_degs")
-    addDataFrame(x=as.data.frame(down_degs_df),sheet=sheet,row.names = F)
+    setColumnWidth(sheet, c(1,3:ncol(down_degs_df)),15)
+    setColumnWidth(sheet, 2, 30)
+    xlsx::createFreezePane(sheet = sheet, rowSplit = 2,colSplit = ncol(down_degs_df)+1)
+    addDataFrame(x=as.data.frame(down_degs_df),sheet=sheet,row.names = F, colStyle = list("2" = gene_description_style),colnamesStyle = header_style)
     try(doGSEA(geneList = down_gene_list,wb=wb,sheetNamePrefix = "pthwys_down_gene_"),silent=T)
     
     excel_report_filepath=getPath(filename = excel_report_filename,directory = excel_report_output_dir)
     saveWorkbook(wb,file=excel_report_filepath)
     gc()
   }
-  
   #############################################
   # get_up_down_details_df
   # this function return the details of upregulated and downregulated genes as a dataframe
@@ -2444,7 +2462,7 @@
     dds = DESeqDataSetFromMatrix(counts_df, colData, formula(~ condition))
     
     # run DEseq
-    res= DESeq(dds, minReplicatesForReplace = 3)
+    res= DESeq(dds)
     
     #plotMA(res)
     
@@ -2895,4 +2913,57 @@ get_pathways_dot_plot_from_degs_file = function(degs_csv_file_path, title = "")
   res= gseKEGG(gene= geneList,organism     = 'hsa',pvalueCutoff = 0.05,nPerm = 10000,seed = T)
   res=setReadable(res, org.Hs.eg.db, keyType = "ENTREZID")
   dotplot(res, showCategory = nrow(res)) + ggtitle(title)
+}
+
+###############################################
+#annotate_degs_df_offline
+#takes a degs df dataframe as an input 
+#degs_df should have the rownames as unique ensembl ids as identifiers
+#this function can be generalized to other ids as well sucha as entrez id
+#returns a dataframe with original ensembl ids, clean ensembl ids added to the dataframe
+#the degs_df is filtered based on only protein coding genes
+###############################################
+annotate_degs_df_offline = function(degs_df, filter_by_padj = FALSE, degs_coming_from = c("deseq2", "edgeR"), arranged = TRUE)
+{
+  library(org.Hs.eg.db)
+  library("EnsDb.Hsapiens.v86")
+  library(dplyr)
+  
+  degs_coming_from = match.arg(degs_coming_from)
+  degs_df = as.data.frame(degs_df)
+  if(nrow(degs_df)==0)
+    return()
+  
+  ensembl_ids = rownames(degs_df)
+  allowed_biotypes=c("IG_C_gene","IG_D_gene","IG_J_gene","IG_LV_gene","IG_V_gene","TR_C_gene","TR_J_gene","TR_V_gene","TR_D_gene ","protein_coding")
+  annotation_df = AnnotationDbi::select(org.Hs.eg.db,keys = getCleanEnsembleIds(ensembl_ids), keytype = "ENSEMBL", columns = c("ENSEMBL","SYMBOL", "GENENAME", "ENTREZID"))
+  annotation_df = annotation_df %>% dplyr::filter(!is.na(SYMBOL))
+  annotation_df = annotation_df %>% inner_join(AnnotationDbi::select(EnsDb.Hsapiens.v86,keys = annotation_df$SYMBOL, keytype = "SYMBOL", columns = c("SYMBOL", "GENEBIOTYPE")), by = c("SYMBOL" = "SYMBOL")) %>% dplyr::filter(GENEBIOTYPE %in% allowed_biotypes)
+  
+  if(degs_coming_from == "deseq2"){
+    degs_df = degs_df %>% dplyr::mutate(ensembl_id = ensembl_ids,clean_ensembl_id = getCleanEnsembleIds(ensembl_ids)) %>% inner_join(annotation_df, by = c("clean_ensembl_id"= "ENSEMBL")) %>% dplyr::select(gene_symbol = SYMBOL, description = GENENAME, log2FoldChange, padj, pvalue, ensembl_id, clean_ensembl_id, entrezgene_id = ENTREZID) 
+    
+    if(arranged){
+      degs_df = degs_df %>% dplyr::arrange(desc(log2FoldChange))
+    }
+    
+    if(filter_by_padj)
+    {
+      degs_df = filterByPadjValue(degs_df)
+    }
+    degs_df = degs_df[!duplicated(degs_df$clean_ensembl_id),]
+  }else if(degs_coming_from == "edgeR"){
+    print("edgeR")
+    degs_df = degs_df %>% dplyr::mutate(ensembl_id = ensembl_ids,clean_ensembl_id = getCleanEnsembleIds(ensembl_ids)) %>% inner_join(annotation_df, by = c("clean_ensembl_id"= "ENSEMBL")) %>% dplyr::select(gene_symbol = SYMBOL, description = GENENAME, log2FoldChange = logFC, padj = FDR, ensembl_id, clean_ensembl_id, entrezgene_id = ENTREZID) 
+    
+    if(arranged){
+      degs_df =  degs_df %>% dplyr::arrange(desc(log2FoldChange))
+    }
+    if(filter_by_padj)
+    {
+      degs_df = degs_df %>% dplyr::filter(padj<0.05)
+    }
+  }
+  
+  return(degs_df)
 }
